@@ -8445,6 +8445,7 @@ __metadata:
     react-hook-form: 7.45.2
     typescript: ^5.1.6
     viem: 2.21.1
+    vitest: ^2.1.2
   languageName: unknown
   linkType: soft
 

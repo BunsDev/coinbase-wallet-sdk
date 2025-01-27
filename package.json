@@ -13,6 +13,7 @@
     "lint": "yarn workspaces foreach -pt run lint",
     "typecheck": "yarn workspaces foreach -pt run typecheck",
     "dev": "yarn workspaces foreach -ipv run dev",
+    "test": "yarn workspaces foreach -pt run test",
     "deploy": "yarn workspace @coinbase/wallet-sdk build && yarn workspace sdk-playground export"
   },
   "devDependencies": {
