@@ -1,22 +1,12 @@
 import { Hex } from 'ox';
-import { SignReturnType } from 'viem/accounts';
-import type { SignReturnType as WebAuthnSignReturnType } from 'webauthn-p256';
+import { WebAuthnAccount } from 'viem/account-abstraction';
+import { LocalAccount } from 'viem/accounts';
 
-export type SubAccountSigner = {
-  type: 'webAuthn'; // TODO: add local support
-  /**
-   * Signs a raw payload
-   * @param rawPayload - The raw payload to sign
-   * @returns {Hex} Signed payload
-   */
-  getSigner: () => Promise<
-    (rawPayload: Hex.Hex) => Promise<WebAuthnSignReturnType | SignReturnType>
-  >;
-  /**
-   * Returns the current signer address. Should be a 20 byte EOA or 64 byte P256 public key
-   * @returns Current Signer Address
-   */
-  getAddress: () => Promise<Hex.Hex>;
+/**
+ * SDK Sub Account interface option
+ */
+export type SubAccount = {
+  getSigner: () => Promise<LocalAccount | WebAuthnAccount>;
 };
 
 /**

@@ -1,5 +1,5 @@
 import { Preference } from ':core/provider/interface.js';
-import { SubAccountSigner } from ':features/sub-accounts/types.js';
+import type { SubAccount } from ':features/sub-accounts/types.js';
 
 /**
  * Validates user supplied preferences. Throws if keys are not valid.
@@ -28,16 +28,8 @@ export function validatePreferences(preference?: Preference) {
  * Validates user supplied subaccount. Throws if keys are not valid.
  * @param subaccount
  */
-export function validateSubAccount(subaccount: SubAccountSigner) {
-  if (!['webAuthn', 'privateKey'].includes(subaccount.type)) {
-    throw new Error(`Invalid subaccount type: ${subaccount.type}`);
-  }
-
+export function validateSubAccount(subaccount: SubAccount) {
   if (typeof subaccount.getSigner !== 'function') {
     throw new Error(`getSigner is not a function`);
-  }
-
-  if (typeof subaccount.getAddress !== 'function') {
-    throw new Error(`getAddress is not a function`);
   }
 }

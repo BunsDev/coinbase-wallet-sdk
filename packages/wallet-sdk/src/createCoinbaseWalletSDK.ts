@@ -8,13 +8,13 @@ import {
 } from ':core/provider/interface.js';
 import { ScopedLocalStorage } from ':core/storage/ScopedLocalStorage.js';
 import { SubAccount } from ':features/sub-accounts/state.js';
-import { SubAccountSigner } from ':features/sub-accounts/types.js';
+import type { SubAccount as SubAccountType } from ':features/sub-accounts/types.js';
 import { checkCrossOriginOpenerPolicy } from ':util/checkCrossOriginOpenerPolicy.js';
 import { validatePreferences, validateSubAccount } from ':util/validatePreferences.js';
 
 export type CreateCoinbaseWalletSDKOptions = Partial<AppMetadata> & {
   preference?: Preference;
-  subaccount?: SubAccountSigner;
+  subaccount?: SubAccountType;
 };
 
 const DEFAULT_PREFERENCE: Preference = {
@@ -56,8 +56,6 @@ export function createCoinbaseWalletSDK(params: CreateCoinbaseWalletSDKOptions) 
     // store the signer in the sub account store
     SubAccount.setState({
       getSigner: subaccount.getSigner,
-      getAddress: subaccount.getAddress,
-      type: subaccount.type,
     });
   }
 

@@ -1,4 +1,6 @@
 import { AbiParameters, Base64, Hash, Hex, PublicKey, Signature, WebCryptoP256 } from 'ox';
+import { hashMessage, hashTypedData } from 'viem';
+import { WebAuthnAccount } from 'viem/account-abstraction';
 
 import { SubAccountCryptoKeyPair } from './keypair.js';
 import { idb } from './storage.js';
@@ -9,7 +11,7 @@ import { ACTIVE_SUB_ACCOUNT_ID_KEY, SCWStateManager } from ':sign/scw/SCWStateMa
 /////////////////////////////////////////////////////////////////////////////////////////////
 export const type = 'webAuthn';
 
-export const authenticatorData =
+const authenticatorData =
   '0x49960de5880e8c687434170f6476605b8fe4aeb9a28632c7995cf3ba831d97630500000000' as const;
 
 /////////////////////////////////////////////////////////////////////////////////////////////
@@ -30,12 +32,20 @@ async function getActiveSubAccountKeypair() {
 /////////////////////////////////////////////////////////////////////////////////////////////
 // Implementation
 /////////////////////////////////////////////////////////////////////////////////////////////
-export async function getSigner() {
+export async function getSigner(): Promise<WebAuthnAccount> {
   const keypair = await getActiveSubAccountKeypair();
   if (!keypair) {
     throw new Error('keypair not found');
   }
-  return async (payload: Hex.Hex) => {
+  /**
+   * public key / address
+   */
+  const address = Hex.slice(PublicKey.toHex(keypair.publicKey), 1);
+
+  /**
+   * signer
+   */
+  const sign = async (payload: Hex.Hex) => {
     const challengeBase64 = Base64.fromHex(payload, { url: true, pad: false });
     const clientDataJSON = `{"type":"webauthn.get","challenge":"${challengeBase64}","origin":"https://keys.coinbase.com"}`;
     const challengeIndex = clientDataJSON.indexOf('"challenge":');
@@ -60,6 +70,20 @@ export async function getSigner() {
         userVerificationRequired: false,
       },
     };
+  };
+  return {
+    id: address,
+    publicKey: address,
+    async sign({ hash }) {
+      return sign(hash);
+    },
+    async signMessage({ message }) {
+      return sign(hashMessage(message));
+    },
+    async signTypedData(parameters) {
+      return sign(hashTypedData(parameters));
+    },
+    type,
   };
 }
 

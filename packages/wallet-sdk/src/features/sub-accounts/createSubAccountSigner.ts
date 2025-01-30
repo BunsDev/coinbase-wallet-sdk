@@ -7,7 +7,6 @@ import {
 import { baseSepolia } from 'viem/chains';
 
 import { SubAccount } from './state.js';
-import { toViemAccount } from './toViemAccount.js';
 import { AddAddressResponse } from './types.js';
 import { RequestArguments } from ':core/provider/interface.js';
 import { getBundlerClient, getClient } from ':features/clients/utils.js';
@@ -17,34 +16,27 @@ async function toSmartAccount({
 }: {
   subAccount: AddAddressResponse;
 }): Promise<ToCoinbaseSmartAccountReturnType> {
-  const { getSigner, getAddress, type } = SubAccount.getState();
+  const { getSigner } = SubAccount.getState();
   if (!getSigner) {
     throw new Error('get signer not found');
   }
 
-  const sign = await getSigner();
-  if (!sign) {
+  const signer = await getSigner();
+  if (!signer) {
     throw new Error('signer not found');
   }
 
-  const signerAddress = await getAddress();
-  const account = toViemAccount({
-    type,
-    sign,
-    address: signerAddress,
-  });
-  // TODO[jake] how do we handle unsupported chains?
+  // TODO[jake] how do we handle unsupported chains
   const client = getClient(subAccount.chainId ?? baseSepolia.id);
   if (!client) {
     throw new Error('client not found');
   }
 
-  // TODO[jake] update to support ownership changes
   return toCoinbaseSmartAccount({
     address: subAccount.address,
     client,
-    owners: [subAccount.root, account],
-    ownerIndex: 1, // TODO[jake] update to support ownership changes
+    owners: [signer],
+    ownerIndex: 0,
   });
 }
 
