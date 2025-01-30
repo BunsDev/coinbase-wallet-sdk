@@ -3,13 +3,10 @@ import { SCWKeyManager } from './SCWKeyManager.js';
 import {
   ACCOUNTS_KEY,
   ACTIVE_CHAIN_STORAGE_KEY,
-  ACTIVE_SUB_ACCOUNT_ID_KEY,
   AVAILABLE_CHAINS_STORAGE_KEY,
-  getSubAccountFromStorage,
-  SCWStateManager,
-  SUB_ACCOUNTS_KEY,
+  scwSignerStorage,
   WALLET_CAPABILITIES_STORAGE_KEY,
-} from './SCWStateManager.js';
+} from './storage.js';
 import { Chain } from './types.js';
 import { enhanceRequestParams, get, getSenderFromRequest } from './utils.js';
 import { Communicator } from ':core/communicator/Communicator.js';
@@ -21,8 +18,13 @@ import { Address } from ':core/type/index.js';
 import { ensureIntNumber, hexStringFromNumber } from ':core/type/util.js';
 import { createClients } from ':features/clients/utils.js';
 import { createSubAccountSigner } from ':features/sub-accounts/createSubAccountSigner.js';
-import { generateSubAccountKeypair } from ':features/sub-accounts/cryptokeys/keypair.js';
-import { idb } from ':features/sub-accounts/cryptokeys/storage.js';
+import { SubAccount } from ':features/sub-accounts/state.js';
+import {
+  ACTIVE_ID_KEY,
+  getSubAccountFromStorage,
+  SUB_ACCOUNTS_KEY,
+  subAccountStorage,
+} from ':features/sub-accounts/storage.js';
 import { AddAddressResponse } from ':features/sub-accounts/types.js';
 import {
   decryptContent,
@@ -55,8 +57,8 @@ export class SCWSigner implements Signer {
     this.callback = params.callback;
     this.keyManager = new SCWKeyManager();
 
-    this.accounts = SCWStateManager.loadObject(ACCOUNTS_KEY) ?? [];
-    this.chain = SCWStateManager.loadObject(ACTIVE_CHAIN_STORAGE_KEY) || {
+    this.accounts = scwSignerStorage.loadObject(ACCOUNTS_KEY) ?? [];
+    this.chain = scwSignerStorage.loadObject(ACTIVE_CHAIN_STORAGE_KEY) || {
       id: params.metadata.appChainIds?.[0] ?? 1,
     };
 
@@ -69,7 +71,7 @@ export class SCWSigner implements Signer {
     this.subAccount = getSubAccountFromStorage();
 
     // load chains
-    const chains = SCWStateManager.loadObject<Chain[]>(AVAILABLE_CHAINS_STORAGE_KEY);
+    const chains = scwSignerStorage.loadObject<Chain[]>(AVAILABLE_CHAINS_STORAGE_KEY);
     if (chains) {
       createClients(chains);
     }
@@ -103,7 +105,7 @@ export class SCWSigner implements Signer {
       case 'eth_requestAccounts': {
         const accounts = result.value as Address[];
         this.accounts = accounts;
-        SCWStateManager.storeObject(ACCOUNTS_KEY, accounts);
+        scwSignerStorage.storeObject(ACCOUNTS_KEY, accounts);
         this.callback?.('accountsChanged', accounts);
         break;
       }
@@ -137,7 +139,7 @@ export class SCWSigner implements Signer {
       case 'eth_chainId':
         return hexStringFromNumber(this.chain.id);
       case 'wallet_getCapabilities':
-        return SCWStateManager.loadObject(WALLET_CAPABILITIES_STORAGE_KEY);
+        return scwSignerStorage.loadObject(WALLET_CAPABILITIES_STORAGE_KEY);
       case 'wallet_switchEthereumChain':
         return this.handleSwitchChainRequest(request);
       case 'eth_ecRecover':
@@ -182,7 +184,7 @@ export class SCWSigner implements Signer {
   }
 
   async cleanup() {
-    SCWStateManager.clear();
+    scwSignerStorage.clear();
     await this.keyManager.clear();
     this.accounts = [];
     this.chain = {
@@ -274,7 +276,7 @@ export class SCWSigner implements Signer {
           ...(nativeCurrency ? { nativeCurrency } : {}),
         };
       });
-      SCWStateManager.storeObject(AVAILABLE_CHAINS_STORAGE_KEY, chains);
+      scwSignerStorage.storeObject(AVAILABLE_CHAINS_STORAGE_KEY, chains);
       this.updateChain(this.chain.id, chains);
       // create clients for sub accounts
       createClients(chains);
@@ -282,7 +284,7 @@ export class SCWSigner implements Signer {
 
     const walletCapabilities = response.data?.capabilities;
     if (walletCapabilities) {
-      SCWStateManager.storeObject(WALLET_CAPABILITIES_STORAGE_KEY, walletCapabilities);
+      scwSignerStorage.storeObject(WALLET_CAPABILITIES_STORAGE_KEY, walletCapabilities);
     }
 
     return response;
@@ -290,60 +292,47 @@ export class SCWSigner implements Signer {
 
   private updateChain(chainId: number, newAvailableChains?: Chain[]): boolean {
     const chains =
-      newAvailableChains ?? SCWStateManager.loadObject<Chain[]>(AVAILABLE_CHAINS_STORAGE_KEY);
+      newAvailableChains ?? scwSignerStorage.loadObject<Chain[]>(AVAILABLE_CHAINS_STORAGE_KEY);
     const chain = chains?.find((chain) => chain.id === chainId);
     if (!chain) return false;
 
     if (chain !== this.chain) {
       this.chain = chain;
-      SCWStateManager.storeObject(ACTIVE_CHAIN_STORAGE_KEY, chain);
+      scwSignerStorage.storeObject(ACTIVE_CHAIN_STORAGE_KEY, chain);
       this.callback?.('chainChanged', hexStringFromNumber(chain.id));
     }
     return true;
   }
 
   private async addAddress(request: RequestArguments) {
-    const active = SCWStateManager.getItem(ACTIVE_SUB_ACCOUNT_ID_KEY);
-    if (active) {
-      const subAccountMap = SCWStateManager.loadObject<Record<string, unknown>>(SUB_ACCOUNTS_KEY);
-      const subAccount = subAccountMap?.[active];
-      if (subAccount) {
-        return subAccount;
+    const account = getSubAccountFromStorage();
+    if (account) {
+      return account;
+    }
+
+    await this.communicator.waitForPopupLoaded?.();
+
+    let signer = get(request, 'params[0].signer') as string;
+    const getSigner = SubAccount.getState().getSigner;
+    if (!signer && getSigner) {
+      const signerAccount = await getSigner();
+      if (!signerAccount) {
+        throw standardErrors.rpc.invalidParams('no signer provided');
       }
+      signer = signerAccount.publicKey;
     }
 
-    const signer = get(request, 'params[0].signer') as string;
-    // could also check if the app supplied a getAddress sub account signer method?
-    if (!signer) {
-      // Open the popup before constructing the request message.
-      // This is to ensure that the popup is not blocked by some browsers (i.e. Safari)
-      await this.communicator.waitForPopupLoaded?.();
-      // Create the subaccount key pair
-      const { id, keypair, publicKey } = await generateSubAccountKeypair();
-      // send request to popup
-
-      const chainId = get(request, 'params[0].chainId') as string;
-      const params = Object.assign({}, { chainId, signer: publicKey });
-      const response = await this.sendRequestToPopup({
-        ...request,
-        params: [params],
-      });
-      // Only store the sub account information after the popup has been closed and the
-      // user has confirmed the creation
-      SCWStateManager.setItem(ACTIVE_SUB_ACCOUNT_ID_KEY, publicKey);
-      SCWStateManager.storeObject(SUB_ACCOUNTS_KEY, { [publicKey]: response });
-      idb.setItem(id, { keypair });
-
-      this.subAccount = getSubAccountFromStorage();
-      return response;
+    if (!Array.isArray(request.params)) {
+      throw standardErrors.rpc.invalidParams();
     }
-    // when apps bring their own keys
+    request.params[0].signer = signer;
+
     const response = await this.sendRequestToPopup(request);
 
     // Only store the sub account information after the popup has been closed and the
     // user has confirmed the creation
-    SCWStateManager.setItem(ACTIVE_SUB_ACCOUNT_ID_KEY, signer.toString());
-    SCWStateManager.storeObject(SUB_ACCOUNTS_KEY, { [signer]: response });
+    subAccountStorage.setItem(ACTIVE_ID_KEY, signer.toString());
+    subAccountStorage.storeObject(SUB_ACCOUNTS_KEY, { [signer]: response });
 
     this.subAccount = getSubAccountFromStorage();
     return response;

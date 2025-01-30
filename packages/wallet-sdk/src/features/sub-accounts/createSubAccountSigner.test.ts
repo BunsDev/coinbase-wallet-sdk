@@ -1,7 +1,7 @@
 import { createSubAccountSigner } from './createSubAccountSigner.js';
-import { idb } from './cryptokeys/storage.js';
+import { ACTIVE_ID_KEY, subAccountStorage } from './storage.js';
 import { AddAddressResponse } from './types.js';
-import { ACTIVE_SUB_ACCOUNT_ID_KEY, SCWStateManager } from ':sign/scw/SCWStateManager.js';
+import { cryptokeyIdb } from ':features/crypto-key-module/storage.js';
 
 const params: AddAddressResponse = {
   address: '0x',
@@ -31,8 +31,8 @@ vi.mock(':features/clients/utils.js', () => ({
 
 describe('createSubAccountSigner', () => {
   it('should create a signer', async () => {
-    SCWStateManager.setItem(ACTIVE_SUB_ACCOUNT_ID_KEY, '0x1');
-    idb.setItem('0x1', { keypair: { privateKey: '0x', publicKey: '0x' } });
+    subAccountStorage.setItem(ACTIVE_ID_KEY, '0x1');
+    cryptokeyIdb.setItem('0x1', { keypair: { privateKey: '0x', publicKey: '0x' } });
     const signer = await createSubAccountSigner(params);
     expect(signer.request).toBeDefined();
   });

@@ -2,29 +2,31 @@ import { AbiParameters, Base64, Hash, Hex, PublicKey, Signature, WebCryptoP256 }
 import { hashMessage, hashTypedData } from 'viem';
 import { WebAuthnAccount } from 'viem/account-abstraction';
 
-import { SubAccountCryptoKeyPair } from './keypair.js';
-import { idb } from './storage.js';
-import { ACTIVE_SUB_ACCOUNT_ID_KEY, SCWStateManager } from ':sign/scw/SCWStateManager.js';
+import { generateKeypair, P256KeyPair } from './keypair.js';
+import { cryptokeyIdb } from './storage.js';
+import { ACTIVE_ID_KEY, subAccountStorage } from ':features/sub-accounts/storage.js';
 
 /////////////////////////////////////////////////////////////////////////////////////////////
 // Constants
 /////////////////////////////////////////////////////////////////////////////////////////////
 export const type = 'webAuthn';
 
-const authenticatorData =
+export const authenticatorData =
   '0x49960de5880e8c687434170f6476605b8fe4aeb9a28632c7995cf3ba831d97630500000000' as const;
 
 /////////////////////////////////////////////////////////////////////////////////////////////
 // Utility
 /////////////////////////////////////////////////////////////////////////////////////////////
-async function getActiveSubAccountKeypair() {
-  const id = SCWStateManager.getItem(ACTIVE_SUB_ACCOUNT_ID_KEY);
+async function getActiveKeypair() {
+  const id = subAccountStorage.getItem(ACTIVE_ID_KEY);
   if (!id) {
-    throw new Error('active sub account id not found');
+    console.error('active account id not found');
+    return;
   }
-  const keypair = await idb.getItem<{ keypair: SubAccountCryptoKeyPair }>(id);
+  const keypair = await cryptokeyIdb.getItem<{ keypair: P256KeyPair }>(id);
   if (!keypair) {
-    throw new Error('keypair not found');
+    console.error('keypair not found');
+    return;
   }
   return keypair.keypair;
 }
@@ -33,14 +35,18 @@ async function getActiveSubAccountKeypair() {
 // Implementation
 /////////////////////////////////////////////////////////////////////////////////////////////
 export async function getSigner(): Promise<WebAuthnAccount> {
-  const keypair = await getActiveSubAccountKeypair();
+  let keypair = await getActiveKeypair();
   if (!keypair) {
-    throw new Error('keypair not found');
+    console.error('keypair not found');
+    const newKeypair = await generateKeypair();
+    // ... RPCs should request the ownership change
+    keypair = newKeypair.keypair;
   }
+
   /**
    * public key / address
    */
-  const address = Hex.slice(PublicKey.toHex(keypair.publicKey), 1);
+  const publicKey = Hex.slice(PublicKey.toHex(keypair.publicKey), 1);
 
   /**
    * signer
@@ -72,8 +78,8 @@ export async function getSigner(): Promise<WebAuthnAccount> {
     };
   };
   return {
-    id: address,
-    publicKey: address,
+    id: publicKey,
+    publicKey,
     async sign({ hash }) {
       return sign(hash);
     },
@@ -85,12 +91,4 @@ export async function getSigner(): Promise<WebAuthnAccount> {
     },
     type,
   };
-}
-
-export async function getAddress() {
-  const keypair = await getActiveSubAccountKeypair();
-  if (!keypair) {
-    throw new Error('keypair not found');
-  }
-  return Hex.slice(PublicKey.toHex(keypair.publicKey), 1);
 }

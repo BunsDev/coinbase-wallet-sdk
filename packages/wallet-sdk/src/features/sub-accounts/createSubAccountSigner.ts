@@ -35,8 +35,8 @@ async function toSmartAccount({
   return toCoinbaseSmartAccount({
     address: subAccount.address,
     client,
-    owners: [signer],
-    ownerIndex: 0,
+    owners: [subAccount.root, signer],
+    ownerIndex: 1,
   });
 }
 

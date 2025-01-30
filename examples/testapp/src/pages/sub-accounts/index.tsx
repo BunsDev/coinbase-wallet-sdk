@@ -1,5 +1,6 @@
 import { Container, VStack } from '@chakra-ui/react';
 import { createCoinbaseWalletSDK } from '@coinbase/wallet-sdk';
+import { getSigner } from '@coinbase/wallet-sdk/dist/features/crypto-key-module';
 import React, { useEffect, useState } from 'react';
 
 import { AddAddressButton } from './components/AddAddressButton';
@@ -16,6 +17,9 @@ export default function SubAccounts() {
       preference: {
         keysUrl: 'http://localhost:3005/connect',
         options: 'smartWalletOnly',
+      },
+      subaccount: {
+        getSigner,
       },
     });
 

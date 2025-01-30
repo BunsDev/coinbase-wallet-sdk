@@ -2,25 +2,25 @@ import { Signature, WebCryptoP256 } from 'ox';
 import { toHex } from 'viem';
 
 import { authenticatorData, getSigner } from './signer.js';
-import { idb } from './storage.js';
-import { ACTIVE_SUB_ACCOUNT_ID_KEY, SCWStateManager } from ':sign/scw/SCWStateManager.js';
+import { cryptokeyIdb } from './storage.js';
+import { subAccountStorage } from ':features/sub-accounts/storage.js';
 
 vi.mock('ox');
 
 describe('signer', () => {
   it('should throw if no active signer is present', async () => {
-    SCWStateManager.getItem = vi.fn().mockReturnValue(null);
+    subAccountStorage.getItem = vi.fn().mockReturnValue(null);
     await expect(getSigner()).rejects.toThrow('active sub account id not found');
   });
 
   it('should throw if no keypair is present', async () => {
-    SCWStateManager.getItem = vi.fn().mockReturnValue('0x123');
+    subAccountStorage.getItem = vi.fn().mockReturnValue('0x123');
     await expect(getSigner()).rejects.toThrow('keypair not found');
   });
 
   it('should sign a message', async () => {
-    SCWStateManager.setItem(ACTIVE_SUB_ACCOUNT_ID_KEY, '0x123');
-    idb.setItem('0x123', {
+    subAccountStorage.getItem = vi.fn().mockReturnValue('0x123');
+    cryptokeyIdb.setItem('0x123', {
       keypair: { privateKey: new Uint8Array(), publicKey: new Uint8Array() },
     });
 
@@ -30,8 +30,8 @@ describe('signer', () => {
     });
     Signature.toHex = vi.fn().mockReturnValue('0xSignature');
 
-    const sign = await getSigner();
-    const signature = await sign(toHex('Hello, world!'));
+    const signer = await getSigner();
+    const signature = await signer.signMessage({ message: toHex('Hello, world!') });
     expect(signature).toEqual(
       expect.objectContaining({
         signature: '0xSignature',
