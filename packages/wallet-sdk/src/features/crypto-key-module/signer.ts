@@ -2,9 +2,8 @@ import { AbiParameters, Base64, Hash, Hex, PublicKey, Signature, WebCryptoP256 }
 import { hashMessage, hashTypedData } from 'viem';
 import { WebAuthnAccount } from 'viem/account-abstraction';
 
-import { generateKeypair, P256KeyPair } from './keypair.js';
-import { cryptokeyIdb } from './storage.js';
-import { ACTIVE_ID_KEY, subAccountStorage } from ':features/sub-accounts/storage.js';
+import { generateKeypair } from './keypair.js';
+import { getActiveKeypair, setActiveId } from './storage.js';
 
 /////////////////////////////////////////////////////////////////////////////////////////////
 // Constants
@@ -15,23 +14,6 @@ export const authenticatorData =
   '0x49960de5880e8c687434170f6476605b8fe4aeb9a28632c7995cf3ba831d97630500000000' as const;
 
 /////////////////////////////////////////////////////////////////////////////////////////////
-// Utility
-/////////////////////////////////////////////////////////////////////////////////////////////
-async function getActiveKeypair() {
-  const id = subAccountStorage.getItem(ACTIVE_ID_KEY);
-  if (!id) {
-    console.error('active account id not found');
-    return;
-  }
-  const keypair = await cryptokeyIdb.getItem<{ keypair: P256KeyPair }>(id);
-  if (!keypair) {
-    console.error('keypair not found');
-    return;
-  }
-  return keypair.keypair;
-}
-
-/////////////////////////////////////////////////////////////////////////////////////////////
 // Implementation
 /////////////////////////////////////////////////////////////////////////////////////////////
 export async function getSigner(): Promise<WebAuthnAccount> {
@@ -39,7 +21,7 @@ export async function getSigner(): Promise<WebAuthnAccount> {
   if (!keypair) {
     console.error('keypair not found');
     const newKeypair = await generateKeypair();
-    // ... RPCs should request the ownership change
+    setActiveId(newKeypair.publicKey);
     keypair = newKeypair.keypair;
   }
 

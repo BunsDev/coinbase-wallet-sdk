@@ -305,23 +305,22 @@ export class SCWSigner implements Signer {
   }
 
   private async addAddress(request: RequestArguments) {
-    const account = getSubAccountFromStorage();
-    if (account) {
-      return account;
+    const subaccount = getSubAccountFromStorage();
+    if (subaccount) {
+      return subaccount;
     }
 
     await this.communicator.waitForPopupLoaded?.();
 
     let signer = get(request, 'params[0].signer') as string;
-    const getSigner = SubAccount.getState().getSigner;
-    if (!signer && getSigner) {
-      const signerAccount = await getSigner();
-      if (!signerAccount) {
-        throw standardErrors.rpc.invalidParams('no signer provided');
-      }
-      signer = signerAccount.publicKey;
+    const state = SubAccount.getState();
+    if (!state.getSigner) {
+      throw standardErrors.rpc.invalidParams('no signer provided');
     }
-
+    const account = await state.getSigner();
+    if (!signer && account) {
+      signer = account.publicKey;
+    }
     if (!Array.isArray(request.params)) {
       throw standardErrors.rpc.invalidParams();
     }

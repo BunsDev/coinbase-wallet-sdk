@@ -14,7 +14,6 @@ export function AddAddressButton({ sdk }: { sdk: ReturnType<typeof createCoinbas
       method: 'wallet_addAddress',
       params: [
         {
-          signer: '0x0000000000000000000000000000000000000000',
           chainId: 84532,
         },
       ],
